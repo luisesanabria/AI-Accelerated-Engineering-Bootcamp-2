@@ -1,17 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
+import { filterTodos, removeTodo, sortTodos, upsertTodo } from './utils/todoUtils';
 
 function App() {
-  const [data, setData] = useState([]);
+  const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [newItem, setNewItem] = useState('');
+  const [newTodoName, setNewTodoName] = useState('');
+  const [editingTodoId, setEditingTodoId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all');
 
   useEffect(() => {
-    fetchData();
+    fetchTodos();
   }, []);
 
-  const fetchData = async () => {
+  const todoStats = useMemo(() => {
+    const completed = todos.filter((todo) => todo.completed).length;
+    return {
+      total: todos.length,
+      completed,
+      pending: todos.length - completed,
+    };
+  }, [todos]);
+
+  const visibleTodos = useMemo(() => filterTodos(todos, activeFilter), [todos, activeFilter]);
+
+  const fetchTodos = async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/items');
@@ -19,19 +34,23 @@ function App() {
         throw new Error('Network response was not ok');
       }
       const result = await response.json();
-      setData(result);
+      setTodos(sortTodos(result));
       setError(null);
     } catch (err) {
-      setError('Failed to fetch data: ' + err.message);
+      setError('Failed to fetch todos: ' + err.message);
       console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleCreateTodo = async (e) => {
     e.preventDefault();
-    if (!newItem.trim()) return;
+
+    if (!newTodoName.trim()) {
+      setError('Todo name cannot be empty');
+      return;
+    }
 
     try {
       const response = await fetch('/api/items', {
@@ -39,83 +58,230 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: newItem }),
+        body: JSON.stringify({ name: newTodoName }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to add item');
+        throw new Error('Failed to create todo');
       }
 
       const result = await response.json();
-      setData([...data, result]);
-      setNewItem('');
+      setTodos((prev) => sortTodos(upsertTodo(prev, result)));
+      setNewTodoName('');
+      setError(null);
     } catch (err) {
-      setError('Error adding item: ' + err.message);
-      console.error('Error adding item:', err);
+      setError('Error creating todo: ' + err.message);
+      console.error('Error creating todo:', err);
     }
   };
 
-  const handleDelete = async (itemId) => {
+  const handleToggleTodo = async (todo) => {
     try {
-      const response = await fetch(`/api/items/${itemId}`, {
+      const response = await fetch(`/api/items/${todo.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ completed: !todo.completed }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update todo');
+      }
+
+      const updatedTodo = await response.json();
+      setTodos((prev) => sortTodos(upsertTodo(prev, updatedTodo)));
+      setError(null);
+    } catch (err) {
+      setError('Error updating todo: ' + err.message);
+      console.error('Error updating todo:', err);
+    }
+  };
+
+  const startEditing = (todo) => {
+    setEditingTodoId(todo.id);
+    setEditingName(todo.name);
+  };
+
+  const cancelEditing = () => {
+    setEditingTodoId(null);
+    setEditingName('');
+  };
+
+  const handleSaveEdit = async (todoId) => {
+    if (!editingName.trim()) {
+      setError('Todo name cannot be empty');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/items/${todoId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: editingName }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to rename todo');
+      }
+
+      const updatedTodo = await response.json();
+      setTodos((prev) => sortTodos(upsertTodo(prev, updatedTodo)));
+      cancelEditing();
+      setError(null);
+    } catch (err) {
+      setError('Error renaming todo: ' + err.message);
+      console.error('Error renaming todo:', err);
+    }
+  };
+
+  const handleDeleteTodo = async (todoId) => {
+    try {
+      const response = await fetch(`/api/items/${todoId}`, {
         method: 'DELETE',
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete item');
+        throw new Error('Failed to delete todo');
       }
 
-      setData(data.filter(item => item.id !== itemId));
+      setTodos((prev) => removeTodo(prev, todoId));
       setError(null);
     } catch (err) {
-      setError('Error deleting item: ' + err.message);
-      console.error('Error deleting item:', err);
+      setError('Error deleting todo: ' + err.message);
+      console.error('Error deleting todo:', err);
+    }
+  };
+
+  const handleClearCompleted = async () => {
+    try {
+      const response = await fetch('/api/items/completed', {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to clear completed todos');
+      }
+
+      setTodos((prev) => prev.filter((t) => !t.completed));
+      setError(null);
+    } catch (err) {
+      setError('Error clearing completed todos: ' + err.message);
+      console.error('Error clearing completed:', err);
     }
   };
 
   return (
     <div className="App">
-      <header className="App-header">
-        <h1>To Do App</h1>
-        <p>Keep track of your tasks</p>
+      <header className="hero">
+        <h1>Todo Planner</h1>
+        <p>Planifica, completa y limpia tus tareas en un solo lugar.</p>
       </header>
 
-      <main>
-        <section className="add-item-section">
-          <h2>Add New Item</h2>
-          <form onSubmit={handleSubmit}>
+      <main className="content">
+        <section className="panel">
+          <h2>Nueva tarea</h2>
+          <form onSubmit={handleCreateTodo} className="create-form">
             <input
               type="text"
-              value={newItem}
-              onChange={(e) => setNewItem(e.target.value)}
-              placeholder="Enter item name"
+              aria-label="New todo name"
+              value={newTodoName}
+              onChange={(e) => setNewTodoName(e.target.value)}
+              placeholder="Ejemplo: Preparar demo"
             />
-            <button type="submit">Add Item</button>
+            <button type="submit">Crear</button>
           </form>
+
+          <div className="stats" aria-label="Todo stats">
+            <span>Total: {todoStats.total}</span>
+            <span>Pendientes: {todoStats.pending}</span>
+            <span>Completadas: {todoStats.completed}</span>
+          </div>
+
+          {error && <p className="error">{error}</p>}
         </section>
 
-        <section className="items-section">
-          <h2>Items from Database</h2>
-          {loading && <p>Loading data...</p>}
-          {error && <p className="error">{error}</p>}
-          {!loading && !error && (
-            <ul>
-              {data.length > 0 ? (
-                data.map((item) => (
-                  <li key={item.id}>
-                    <span>{item.name}</span>
-                    <button 
-                      onClick={() => handleDelete(item.id)}
-                      className="delete-btn"
+        <section className="panel">
+          <h2>Mis tareas</h2>
+
+          <div className="filters" aria-label="Filter todos">
+            {['all', 'pending', 'completed'].map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={activeFilter === f ? 'filter-btn active' : 'filter-btn'}
+                onClick={() => setActiveFilter(f)}
+                aria-pressed={activeFilter === f}
+              >
+                {f === 'all' ? 'Todas' : f === 'pending' ? 'Pendientes' : 'Completadas'}
+              </button>
+            ))}
+            {todoStats.completed > 0 && (
+              <button
+                type="button"
+                className="danger"
+                onClick={handleClearCompleted}
+                aria-label="Clear completed todos"
+              >
+                Limpiar completadas
+              </button>
+            )}
+          </div>
+
+          {loading && <p>Loading todos...</p>}
+          {!loading && visibleTodos.length === 0 && <p>No hay tareas. Crea la primera.</p>}
+          {!loading && visibleTodos.length > 0 && (
+            <ul className="todo-list" aria-label="Todo list">
+              {visibleTodos.map((todo) => (
+                <li key={todo.id} className={todo.completed ? 'todo-item completed' : 'todo-item'}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      aria-label={`Toggle ${todo.name}`}
+                      checked={todo.completed}
+                      onChange={() => handleToggleTodo(todo)}
+                    />
+                  </label>
+
+                  {editingTodoId === todo.id ? (
+                    <input
+                      type="text"
+                      aria-label="Edit todo name"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                    />
+                  ) : (
+                    <span>{todo.name}</span>
+                  )}
+
+                  <div className="actions">
+                    {editingTodoId === todo.id ? (
+                      <>
+                        <button type="button" onClick={() => handleSaveEdit(todo.id)}>
+                          Guardar
+                        </button>
+                        <button type="button" className="secondary" onClick={cancelEditing}>
+                          Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="secondary" onClick={() => startEditing(todo)}>
+                        Editar
+                      </button>
+                    )}
+
+                    <button
                       type="button"
+                      className="danger"
+                      onClick={() => handleDeleteTodo(todo.id)}
                     >
-                      Delete
+                      Eliminar
                     </button>
-                  </li>
-                ))
-              ) : (
-                <p>No items found. Add some!</p>
-              )}
+                  </div>
+                </li>
+              ))}
             </ul>
           )}
         </section>
