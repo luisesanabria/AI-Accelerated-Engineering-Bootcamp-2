@@ -22,3 +22,9 @@ export function sortTodos(todos) {
     return b.id - a.id;
   });
 }
+
+export function filterTodos(todos, filter) {
+  if (filter === 'pending') return todos.filter((t) => !t.completed);
+  if (filter === 'completed') return todos.filter((t) => t.completed);
+  return todos;
+}

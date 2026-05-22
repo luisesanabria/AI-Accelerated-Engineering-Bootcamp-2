@@ -36,6 +36,15 @@ class TodoPage {
     await this.page.getByLabel('Edit todo name').fill(newName);
     await this.page.getByRole('button', { name: 'Guardar' }).click();
   }
+
+  async filterBy(filter) {
+    const labels = { all: 'Todas', pending: 'Pendientes', completed: 'Completadas' };
+    await this.page.getByRole('button', { name: labels[filter] }).click();
+  }
+
+  async clearCompleted() {
+    await this.page.getByLabel('Clear completed todos').click();
+  }
 }
 
 module.exports = { TodoPage };

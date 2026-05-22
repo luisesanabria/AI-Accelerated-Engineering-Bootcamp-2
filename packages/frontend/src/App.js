@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
-import { removeTodo, sortTodos, upsertTodo } from './utils/todoUtils';
+import { filterTodos, removeTodo, sortTodos, upsertTodo } from './utils/todoUtils';
 
 function App() {
   const [todos, setTodos] = useState([]);
@@ -9,6 +9,7 @@ function App() {
   const [newTodoName, setNewTodoName] = useState('');
   const [editingTodoId, setEditingTodoId] = useState(null);
   const [editingName, setEditingName] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all');
 
   useEffect(() => {
     fetchTodos();
@@ -22,6 +23,8 @@ function App() {
       pending: todos.length - completed,
     };
   }, [todos]);
+
+  const visibleTodos = useMemo(() => filterTodos(todos, activeFilter), [todos, activeFilter]);
 
   const fetchTodos = async () => {
     try {
@@ -152,6 +155,24 @@ function App() {
     }
   };
 
+  const handleClearCompleted = async () => {
+    try {
+      const response = await fetch('/api/items/completed', {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to clear completed todos');
+      }
+
+      setTodos((prev) => prev.filter((t) => !t.completed));
+      setError(null);
+    } catch (err) {
+      setError('Error clearing completed todos: ' + err.message);
+      console.error('Error clearing completed:', err);
+    }
+  };
+
   return (
     <div className="App">
       <header className="hero">
@@ -184,11 +205,36 @@ function App() {
 
         <section className="panel">
           <h2>Mis tareas</h2>
+
+          <div className="filters" aria-label="Filter todos">
+            {['all', 'pending', 'completed'].map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={activeFilter === f ? 'filter-btn active' : 'filter-btn'}
+                onClick={() => setActiveFilter(f)}
+                aria-pressed={activeFilter === f}
+              >
+                {f === 'all' ? 'Todas' : f === 'pending' ? 'Pendientes' : 'Completadas'}
+              </button>
+            ))}
+            {todoStats.completed > 0 && (
+              <button
+                type="button"
+                className="danger"
+                onClick={handleClearCompleted}
+                aria-label="Clear completed todos"
+              >
+                Limpiar completadas
+              </button>
+            )}
+          </div>
+
           {loading && <p>Loading todos...</p>}
-          {!loading && todos.length === 0 && <p>No hay tareas. Crea la primera.</p>}
-          {!loading && todos.length > 0 && (
+          {!loading && visibleTodos.length === 0 && <p>No hay tareas. Crea la primera.</p>}
+          {!loading && visibleTodos.length > 0 && (
             <ul className="todo-list" aria-label="Todo list">
-              {todos.map((todo) => (
+              {visibleTodos.map((todo) => (
                 <li key={todo.id} className={todo.completed ? 'todo-item completed' : 'todo-item'}>
                   <label>
                     <input

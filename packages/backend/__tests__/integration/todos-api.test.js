@@ -54,4 +54,29 @@ describe('Todos API integration', () => {
       error: 'Completed must be a boolean value',
     });
   });
+
+  it('clears all completed todos', async () => {
+    await request(app).post('/api/items').send({ name: 'Keep me' }).set('Accept', 'application/json');
+
+    const completedRes = await request(app)
+      .post('/api/items')
+      .send({ name: 'Delete me' })
+      .set('Accept', 'application/json');
+    const completedId = completedRes.body.id;
+
+    await request(app)
+      .patch(`/api/items/${completedId}`)
+      .send({ completed: true })
+      .set('Accept', 'application/json');
+
+    const clearResponse = await request(app).delete('/api/items/completed');
+    expect(clearResponse.status).toBe(200);
+    expect(clearResponse.body).toMatchObject({ message: 'Completed items cleared' });
+    expect(clearResponse.body.count).toBeGreaterThanOrEqual(1);
+
+    const listResponse = await request(app).get('/api/items');
+    const names = listResponse.body.map((i) => i.name);
+    expect(names).toContain('Keep me');
+    expect(names).not.toContain('Delete me');
+  });
 });

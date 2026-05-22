@@ -1,4 +1,4 @@
-import { removeTodo, sortTodos, upsertTodo } from '../utils/todoUtils';
+import { filterTodos, removeTodo, sortTodos, upsertTodo } from '../utils/todoUtils';
 
 describe('todoUtils', () => {
   it('upsertTodo adds missing todo', () => {
@@ -36,5 +36,32 @@ describe('todoUtils', () => {
     const result = sortTodos(list);
 
     expect(result.map((t) => t.id)).toEqual([3, 2, 1]);
+  });
+
+  describe('filterTodos', () => {
+    const list = [
+      { id: 1, name: 'Pending task', completed: false },
+      { id: 2, name: 'Done task', completed: true },
+    ];
+
+    it('returns all todos when filter is "all"', () => {
+      expect(filterTodos(list, 'all')).toHaveLength(2);
+    });
+
+    it('returns only pending todos when filter is "pending"', () => {
+      const result = filterTodos(list, 'pending');
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(1);
+    });
+
+    it('returns only completed todos when filter is "completed"', () => {
+      const result = filterTodos(list, 'completed');
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(2);
+    });
+
+    it('returns all todos for unknown filter values', () => {
+      expect(filterTodos(list, 'unknown')).toHaveLength(2);
+    });
   });
 });

@@ -51,6 +51,10 @@ const server = setupServer(
 
   rest.delete('/api/items/:id', (req, res, ctx) => {
     return res(ctx.status(200), ctx.json({ message: 'Item deleted successfully', id: Number(req.params.id) }));
+  }),
+
+  rest.delete('/api/items/completed', (req, res, ctx) => {
+    return res(ctx.status(200), ctx.json({ message: 'Completed items cleared', count: 1 }));
   })
 );
 
@@ -148,6 +152,58 @@ describe('App Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText('No hay tareas. Crea la primera.')).toBeInTheDocument();
+    });
+  });
+  test('filters todos by pending status', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Item 1')).toBeInTheDocument();
+      expect(screen.getByText('Test Item 2')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Pendientes', pressed: false }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Item 1')).toBeInTheDocument();
+      expect(screen.queryByText('Test Item 2')).not.toBeInTheDocument();
+    });
+  });
+
+  test('filters todos by completed status', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Item 1')).toBeInTheDocument();
+      expect(screen.getByText('Test Item 2')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Completadas', pressed: false }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Test Item 1')).not.toBeInTheDocument();
+      expect(screen.getByText('Test Item 2')).toBeInTheDocument();
+    });
+  });
+
+  test('clears all completed todos', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Item 2')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Clear completed todos'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Test Item 2')).not.toBeInTheDocument();
+      expect(screen.getByText('Test Item 1')).toBeInTheDocument();
     });
   });
 });

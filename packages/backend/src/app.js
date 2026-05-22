@@ -116,6 +116,16 @@ app.patch('/api/items/:id', (req, res) => {
   }
 });
 
+app.delete('/api/items/completed', (req, res) => {
+  try {
+    const result = db.prepare('DELETE FROM items WHERE completed = 1').run();
+    res.json({ message: 'Completed items cleared', count: result.changes });
+  } catch (error) {
+    console.error('Error clearing completed items:', error);
+    res.status(500).json({ error: 'Failed to clear completed items' });
+  }
+});
+
 app.delete('/api/items/:id', (req, res) => {
   try {
     const { id } = req.params;
