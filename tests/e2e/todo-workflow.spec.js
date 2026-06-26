@@ -1,24 +1,40 @@
 const { test, expect } = require('@playwright/test');
 const { TodoPage } = require('./pages/TodoPage');
 
+function uniqueTodoName(prefix) {
+  return `${prefix} ${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+}
+
 test.describe('Todo workflow', () => {
-  test('shows empty state when there are no todos', async ({ page }) => {
+  test('renders app shell and todo stats', async ({ page }) => {
     const todoPage = new TodoPage(page);
     await todoPage.goto();
 
     await expect(page.getByText('Todo Planner')).toBeVisible();
-    await expect(page.getByText('Total: 0')).toBeVisible();
+    await expect(page.getByLabel('Todo stats')).toContainText('Total:');
+    await expect(page.getByRole('heading', { name: 'Mis tareas' })).toBeVisible();
   });
 
-  test('user can create a new todo', async ({ page }) => {
+  test('user can create a new todo and persist it in backend', async ({ page, request }) => {
     const todoPage = new TodoPage(page);
     await todoPage.goto();
+    const todoName = uniqueTodoName('Buy groceries');
 
-    await todoPage.createTodo('Buy groceries');
+    const beforeResponse = await request.get('http://localhost:3030/api/items');
+    expect(beforeResponse.ok()).toBeTruthy();
+    const beforeItems = await beforeResponse.json();
 
-    await expect(todoPage.todoItem('Buy groceries')).toBeVisible();
-    await expect(page.getByText('Total: 1')).toBeVisible();
-    await expect(page.getByText('Pendientes: 1')).toBeVisible();
+    await todoPage.createTodo(todoName);
+
+    await expect(todoPage.todoItem(todoName)).toBeVisible();
+
+    const afterResponse = await request.get('http://localhost:3030/api/items');
+    expect(afterResponse.ok()).toBeTruthy();
+    const afterItems = await afterResponse.json();
+    expect(afterItems.length).toBe(beforeItems.length + 1);
+    expect(afterItems.some((item) => item.name === todoName)).toBeTruthy();
+
+    await expect(page.getByLabel('Todo stats')).toContainText(`Total: ${afterItems.length}`);
   });
 
   test('user can complete a todo', async ({ page }) => {
